@@ -1,0 +1,5 @@
+CycleGAN_with_DSL/evaluate
+CycleGAN_with_DSL/slurm
+CycleGAN_original/slurm
+CycleGAN_with_Gaussian_Noise/slurm
+
