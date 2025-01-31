@@ -496,7 +496,7 @@ if __name__ == '__main__':
     parser.add_argument("-norm", "--normalisation", type=str, default="instance")
     parser.add_argument("-ne", "--num_epochs", type=int, default=50)
     parser.add_argument("-si", "--save_interval", type=int, default=1000)
-    parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "phd/data"))
+    parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "data"))
     parser.add_argument("-pmp", "--pretrained_model_path", type=str)
     parser.add_argument("-pml", "--pretrained_model_label", type=str)
     parser.add_argument("-l", "--lambda_domain_shift", type=float, default=1.0)

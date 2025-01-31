@@ -355,7 +355,7 @@ class Training:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train cycleGAN with pretrained model's segmentation loss")
+    parser = argparse.ArgumentParser(description="Train cycleGAN")
 
     parser.add_argument("-sd", "--source_domain", type=str, default="02")
     parser.add_argument("-td", "--target_domain", type=str, default="03")
@@ -366,7 +366,7 @@ if __name__ == '__main__':
     parser.add_argument("-norm", "--normalisation", type=str, default="instance")
     parser.add_argument("-ne", "--num_epochs", type=int, default=50)
     parser.add_argument("-si", "--save_interval", type=int, default=1000)
-    parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "phd/data"))
+    parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "data"))
     parser.add_argument("-op", "--output_path", type=str)
     parser.add_argument("-rep", "--repetition", type=str, default="rep1")
 

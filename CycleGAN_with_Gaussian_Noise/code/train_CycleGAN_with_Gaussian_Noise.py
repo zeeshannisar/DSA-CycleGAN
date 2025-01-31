@@ -260,7 +260,7 @@ if __name__ == '__main__':
     parser.add_argument("-si", "--save_interval", type=int, default=1000)
     parser.add_argument("-stddev", "--noise_std_dev", type=float, default=0.0125,
                         help="[0.0125, 0.025, 0.050, 0.075, 0.1, 0.2, 0.3, 0.5 0.9]")
-    parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "phd/data"))
+    parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "data"))
     parser.add_argument("-op", "--output_path", type=str)
     parser.add_argument("-rep", "--repetition", type=str, default="rep1")
 
