@@ -2,4 +2,6 @@ CycleGAN_with_DSL/evaluate
 CycleGAN_with_DSL/slurm
 CycleGAN_original/slurm
 CycleGAN_with_Gaussian_Noise/slurm
+CycleGAN_with_Extra_Channels/slurm
+CycleGAN_with_Self_Supervision/slurm
 
