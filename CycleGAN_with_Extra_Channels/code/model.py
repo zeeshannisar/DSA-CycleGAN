@@ -17,8 +17,7 @@ def get_norm_layer(norm, momentum=0.9, axis=3, scale=True, center=True, groups=8
 
 
 class CycleGAN:
-    def __init__(self, norm="instance"):
-        # Input shape is kept according to the input shape of U-Net model
+    def __init__(self, norm="instance", extra_channel=False, extra_channel_mode=None):
         self.img_rows = 508
         self.img_cols = 508
         self.channels = 3
@@ -86,7 +85,15 @@ class CycleGAN:
             g = tf.keras.layers.Activation('relu')(g)
             return g
 
-        img_shape = (self.img_rows, self.img_cols, self.channels)
+        if self.extra_channel:
+            if self.extra_channel_mode == 'grayscale':
+                img_shape = (self.img_rows, self.img_cols, self.channels + 1)
+            elif self.extra_channel_mode == 'rgb':
+                img_shape = (self.img_rows, self.img_cols, self.channels + 3)
+            else:
+                raise ValueError("ExtraChannelMode to save the Noisy information should be one of ['grayscale', 'rgb']")
+        else:
+            img_shape = (self.img_rows, self.img_cols, self.channels)
 
         g0 = tf.keras.layers.Input(shape=img_shape)
 

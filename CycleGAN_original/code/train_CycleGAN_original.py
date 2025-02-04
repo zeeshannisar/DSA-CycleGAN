@@ -206,10 +206,7 @@ class Training:
                 id_loss_BB = self.model_weights["lambda_id"] * id_loss_func(imgs_B, id_B)
                 id_loss = id_loss_AA + id_loss_BB
 
-                # domain_shift loss
-
-
-                # adversarial loss + cycle loss + identity loss + segmentation_loss
+                # adversarial loss + cycle loss + identity loss
                 gen_loss = adv_loss + cyc_loss + id_loss
 
                 losses = {"gen_loss": gen_loss, "adv_loss": adv_loss, "cyc_loss": cyc_loss, "id_loss": id_loss}

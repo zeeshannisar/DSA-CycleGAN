@@ -1,14 +1,12 @@
 import os
 
 import matplotlib
-import random
-
 matplotlib.use('Agg')
 import numpy as np
 import glob
 import os
-import h5py
 import datetime
+import h5py
 import json
 import argparse
 
@@ -16,11 +14,10 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from model import CycleGAN
-from Image_Pool_model import ImagePool, ImagePoolForDomainShiftLoss
+from Image_Pool_model import ImagePool
 from dataloader.tf_dataloader_API import TFDataLoader
 from callbacks import SaveHistory, update_train_history
-from scipy.stats import wasserstein_distance
-from helper.select_gpu import pick_gpu_lowest_memory
+from select_gpu import pick_gpu_lowest_memory
 import tensorflow.keras.backend as K
 
 
@@ -42,13 +39,13 @@ def SaveTrainingHistory(logpath, historyfile):
     plt.plot(history['adv_loss'])
     plt.plot(history['cyc_loss'])
     plt.plot(history['id_loss'])
-    plt.plot(history['ds_loss'])
+    plt.plot(history['seg_loss'])
 
     plt.title('model loss')
     plt.ylabel('loss')
     plt.xlabel('epoch')
 
-    plt.legend(['dis_loss', 'gen_loss', 'adv_loss', 'cyc_loss', 'id_loss', 'ds_loss'], loc='best')
+    plt.legend(['dis_loss', 'gen_loss', 'adv_loss', 'cyc_loss', 'id_loss', 'seg_loss'], loc='best')
     plt.gcf().savefig(os.path.join(logpath, 'loss_history.png'))
 
     # Write history to json file
@@ -111,15 +108,14 @@ def saveModelArchitecture(path, model):
 def LR_decay(epoch, same_lr, reach_zero):
     return 1.0 - max(0, epoch + 1 - same_lr) / float(reach_zero)
 
-
 def set_LR(optimizer, epoch, epochs):
     current_LR = tf.keras.backend.get_value(optimizer.lr)
     tf.keras.backend.set_value(optimizer.lr, current_LR * LR_decay(epoch, epochs / 2, epochs / 2))
 
 
 def load_pretrained_model(args):
-    model = tf.keras.models.load_model(os.path.join(args.pretrained_model_path, "unet_best." + args.pretrained_model_label + ".hdf5"))
-    model = tf.keras.models.Model(model.input, model.get_layer("activation_10").output)
+    model = tf.keras.models.load_model(
+        os.path.join(args.pretrained_model_path, "unet_best." + args.pretrained_model_label + ".hdf5"))
 
     model.trainable = False
     model._name = "unet_model"
@@ -134,25 +130,7 @@ def load_pretrained_model(args):
             "name": model._name,
             "mean": mean,
             "stddev": stddev,
-            "loss_name": "cyclegan_with_dsl"}
-
-
-def disc_loss_func(y_true, y_pred):
-    y_true_loss = tf.keras.losses.MeanSquaredError()(y_true, tf.ones_like(input=y_true, dtype=y_true.dtype))
-    y_pred_loss = tf.keras.losses.MeanSquaredError()(y_pred, tf.zeros_like(input=y_pred, dtype=y_pred.dtype))
-    return 0.5 * (y_true_loss + y_pred_loss)
-
-
-def gen_loss_func(y_pred):
-    return tf.keras.losses.MeanSquaredError()(y_pred, tf.ones_like(input=y_pred, dtype=y_pred.dtype))
-
-
-def cyc_loss_func(y_true, y_pred):
-    return tf.keras.losses.MeanAbsoluteError()(y_true, y_pred)
-
-
-def id_loss_func(y_true, y_pred):
-    return tf.keras.losses.MeanAbsoluteError()(y_true, y_pred)
+            "loss_name": "cyclegan_with_segmentation_loss"}
 
 
 def standardise_sample(sample):
@@ -168,33 +146,31 @@ def normalise_sample(sample, mean, stddev):
     return sample
 
 
-def extract_activations(images, feature_extractor, mean, stddev):
-    # Rescale data as it is in the range [-1, 1]
-    images = (images + 1) * 127.5
-    # Initialize an empty list to hold activations
-    activations = []
-    # Iterate over each image in the batch (using a for loop)
-    for idx in range(images.shape[0]):
-        img = images[idx]
-        # Standardize the image
-        img = standardise_sample(img)
-        # Normalize the image
-        img = normalise_sample(img, mean, stddev)
-        # Extract activations for the current image
-        activation = feature_extractor(tf.expand_dims(img, axis=0))  # Add batch dimension
-        # Store activations for the current image
-        activations.append(tf.squeeze(activation, axis=0))  # Remove batch dimension
-    # Stack the activations into a single tensor of shape (batch_size, height, width, feature_dim)
-    activations = tf.stack(activations)
-    # Apply mean pooling (reduce height and width dimensions)
-    return tf.reduce_mean(activations, axis=[1, 2])  # Shape: (batch_size, feature_dim)
+def extract_features(image, model, mean, stddev):
+    image = (image + 1) * 127.5  # [0-255]
+    image = standardise_sample(image)
+    image = normalise_sample(image, mean, stddev)
+    return model(image, training=False)
 
-def wasserstein_distance_np(y_true, y_pred):
-    dss = [wasserstein_distance(y_true[:, channel], y_pred[:, channel]) for channel in range(y_true.shape[1])]
-    return np.array(dss).mean().astype(np.float32)
+def segmentation_loss(y_true, y_pred, model):
+    y_true = extract_features(y_true, model["model"], model["mean"], model["stddev"])
+    y_pred = extract_features(y_pred, model["model"], model["mean"], model["stddev"])
+    return tf.keras.losses.MeanAbsoluteError()(y_true, y_pred)
 
-def domain_shift_loss(y_true, y_pred):
-    return tf.numpy_function(func=wasserstein_distance_np, inp=[y_true, y_pred], Tout=tf.float32)
+def disc_loss_func(y_true, y_pred):
+    y_true_loss = tf.keras.losses.MeanSquaredError()(y_true, tf.ones_like(input=y_true, dtype=y_true.dtype))
+    y_pred_loss = tf.keras.losses.MeanSquaredError()(y_pred, tf.zeros_like(input=y_pred, dtype=y_pred.dtype))
+    return 0.5 * (y_true_loss + y_pred_loss)
+
+def gen_loss_func(y_pred):
+    return tf.keras.losses.MeanSquaredError()(y_pred, tf.ones_like(input=y_pred, dtype=y_pred.dtype))
+
+def cyc_loss_func(y_true, y_pred):
+    return tf.keras.losses.MeanAbsoluteError()(y_true, y_pred)
+
+def id_loss_func(y_true, y_pred):
+    return tf.keras.losses.MeanAbsoluteError()(y_true, y_pred)
+
 
 class Training:
     def __init__(self, args):
@@ -222,26 +198,18 @@ class Training:
         saveModelArchitecture(os.path.join(self.output_path, "modelsArchitectures/discriminators/D_A"), self.model.D_A)
         saveModelArchitecture(os.path.join(self.output_path, "modelsArchitectures/discriminators/D_B"), self.model.D_B)
 
-        self.model_weights = {"lambda_adv": self.model.lambda_adv,
-                              "lambda_cycle": self.model.lambda_cycle,
-                              "lambda_id": self.model.lambda_id,
-                              "lambda_domain_shift": arguments.lambda_domain_shift}
-
-        # Initialize pretrained model
-        self.pretrained_model = load_pretrained_model(args)
-        # self.pretrained_model["model"].summary()
-
         # the buffer stores 50 generated images
         self.fake_A_pool = ImagePool(50)
         self.fake_B_pool = ImagePool(50)
 
-        self.dsl_pool_size = args.dsl_pool_size
-        self.image_A_pool_dsl = ImagePoolForDomainShiftLoss(self.dsl_pool_size)
-        self.fake_B_pool_dsl = ImagePoolForDomainShiftLoss(self.dsl_pool_size)
-        self.cyc_A_pool_dsl = ImagePoolForDomainShiftLoss(self.dsl_pool_size)
-        self.id_A_pool_dsl = ImagePoolForDomainShiftLoss(self.dsl_pool_size)
+        self.model_weights = {"lambda_adv": self.model.lambda_adv,
+                              "lambda_cycle": self.model.lambda_cycle,
+                              "lambda_id": self.model.lambda_id,
+                              "lambda_segmentation": arguments.lambda_segmentation}
 
-        self.calculate_loss_strategy = args.calculate_loss_strategy
+        # Initialize pretrained model
+        self.pretrained_model = load_pretrained_model(args)
+        # self.pretrained_model["model"].summary()
 
     def train(self, NumEpochs, batch_size=1, sample_interval=10):
         os.makedirs(os.path.join(self.output_path, "graphs"), exist_ok=True)
@@ -260,18 +228,18 @@ class Training:
             self.model_weights.update({"lambda_cycle": self.model.lambda_cycle, "lambda_id": self.model.lambda_id})
 
         @tf.function
-        def train_G(img_A, img_B, feature_extractor=None, mean=None, stddev=None, pool_img_A=None, pool_fake_A=None,
-                    pool_cyc_A=None, pool_id_A=None):
+        def train_G(imgs_A, imgs_B):
+            # persistent is set to True because the tape is used more than once to calculate the gradients.
             with tf.GradientTape() as tape:
                 # Generator G_AB translates A -> B
-                fake_B = self.model.G_AB(img_A, training=True)
+                fake_B = self.model.G_AB(imgs_A, training=True)
                 cyc_A = self.model.G_BA(fake_B, training=True)
                 # Generator G_BA translates B -> A.
-                fake_A = self.model.G_BA(img_B, training=True)
+                fake_A = self.model.G_BA(imgs_B, training=True)
                 cyc_B = self.model.G_AB(fake_A, training=True)
                 # same_x and same_y are used for identity loss.
-                id_A = self.model.G_BA(img_A, training=True)
-                id_B = self.model.G_AB(img_B, training=True)
+                id_A = self.model.G_BA(imgs_A, training=True)
+                id_B = self.model.G_AB(imgs_B, training=True)
                 # discriminator output
                 disc_fake_B = self.model.D_B(fake_B, training=True)
                 disc_fake_A = self.model.D_A(fake_A, training=True)
@@ -282,42 +250,26 @@ class Training:
                 adv_loss = adv_loss_AB + adv_loss_BA
 
                 # cycle loss
-                cyc_loss_ABA = self.model_weights["lambda_cycle"] * cyc_loss_func(img_A, cyc_A)
-                cyc_loss_BAB = self.model_weights["lambda_cycle"] * cyc_loss_func(img_B, cyc_B)
+                cyc_loss_ABA = self.model_weights["lambda_cycle"] * cyc_loss_func(imgs_A, cyc_A)
+                cyc_loss_BAB = self.model_weights["lambda_cycle"] * cyc_loss_func(imgs_B, cyc_B)
                 cyc_loss = cyc_loss_ABA + cyc_loss_BAB
 
                 # identity loss
-                id_loss_AA = self.model_weights["lambda_id"] * id_loss_func(img_A, id_A)
-                id_loss_BB = self.model_weights["lambda_id"] * id_loss_func(img_B, id_B)
+                id_loss_AA = self.model_weights["lambda_id"] * id_loss_func(imgs_A, id_A)
+                id_loss_BB = self.model_weights["lambda_id"] * id_loss_func(imgs_B, id_B)
                 id_loss = id_loss_AA + id_loss_BB
 
-                if pool_img_A is not None and pool_fake_A is not None and pool_cyc_A is not None and pool_id_A is not None:
-                    pool_img_A = extract_activations(pool_img_A, feature_extractor, mean, stddev)
-                    pool_fake_A = extract_activations(pool_fake_A, feature_extractor, mean, stddev)
-                    pool_cyc_A = extract_activations(pool_cyc_A, feature_extractor, mean, stddev)
-                    pool_id_A = extract_activations(pool_id_A, feature_extractor, mean, stddev)
+                # segmentation loss
+                seg_loss_AcycA = segmentation_loss(imgs_A, cyc_A, self.pretrained_model)
+                seg_loss_AidA = segmentation_loss(imgs_A, id_A, self.pretrained_model)
+                seg_loss = self.model_weights["lambda_segmentation"] * (seg_loss_AcycA + seg_loss_AidA)
 
-                    if self.calculate_loss_strategy == "proposed":
-                        # If proposed strategy (as in paper): Calculating DSL for (A, fakeA) + (A, cycA) + (A, idA)
-                        # Else Bouteldja et al. strategy: Calculating DSL for (A, cycA) + (A, idA)
-                        ds_loss_AfakeA = domain_shift_loss(pool_img_A, pool_fake_A)
 
-                    ds_loss_AcycA = domain_shift_loss(pool_img_A, pool_cyc_A)
-                    ds_loss_AidA = domain_shift_loss(pool_img_A, pool_id_A)
-
-                    if self.calculate_loss_strategy == "proposed":
-                        ds_loss = self.model_weights["lambda_domain_shift"] * (ds_loss_AfakeA + ds_loss_AcycA + ds_loss_AidA)
-                    else:
-                        ds_loss = self.model_weights["lambda_domain_shift"] * (ds_loss_AcycA + ds_loss_AidA)
-
-                else:
-                    ds_loss = 0.0  # No extra loss until buffer is full
-
-                # adversarial loss + cycle loss + identity loss + domain_shift loss
-                gen_loss = adv_loss + cyc_loss + id_loss + ds_loss
+                # adversarial loss + cycle loss + identity loss + segmentation_loss
+                gen_loss = adv_loss + cyc_loss + id_loss + seg_loss
 
                 losses = {"gen_loss": gen_loss, "adv_loss": adv_loss, "cyc_loss": cyc_loss, "id_loss": id_loss,
-                          "ds_loss": ds_loss}
+                          "seg_loss": seg_loss}
 
             # Calculate the gradients for generator
             G_grads = tape.gradient(gen_loss, self.model.G_AB.trainable_variables + self.model.G_BA.trainable_variables)
@@ -345,29 +297,7 @@ class Training:
 
 
         def train_on_batch(image_A, image_B):
-            # Generate fake A image
-            fake_A = self.model.G_BA(image_B, training=False)
-            fake_B = self.model.G_AB(image_A, training=False)
-            cyc_A = self.model.G_BA(fake_B, training=False)
-            id_A = self.model.G_BA(image_A, training=False)
-
-            # Query the image pool
-            random_id = random.randint(0, self.dsl_pool_size - 1)
-            pool_image_A = self.image_A_pool_dsl.query(image_A, random_id)
-            pool_fake_A = self.fake_B_pool_dsl.query(fake_A, random_id)
-            pool_cyc_A = self.cyc_A_pool_dsl.query(cyc_A, random_id)
-            pool_id_A = self.id_A_pool_dsl.query(id_A, random_id)
-
-
-            if pool_image_A is not None and pool_fake_A is not None and pool_cyc_A is not None and pool_id_A is not None:
-                fake_B, fake_A, g_loss_per_batch_tmp = train_G(image_A, image_B,
-                                                               self.pretrained_model["model"],
-                                                               tf.cast(self.pretrained_model["mean"], image_A.dtype),
-                                                               tf.cast(self.pretrained_model["stddev"], image_A.dtype),
-                                                               pool_image_A, pool_fake_A, pool_cyc_A, pool_id_A)
-            else:
-                fake_B, fake_A, g_loss_per_batch_tmp = train_G(image_A, image_B)
-
+            fake_B, fake_A, g_loss_per_batch_tmp = train_G(image_A, image_B)
             # Image pool utilization
             fake_B = self.fake_B_pool.query(fake_B)
             fake_A = self.fake_A_pool.query(fake_A)
@@ -391,9 +321,10 @@ class Training:
 
                 progbar = tf.keras.utils.Progbar(target=self.__len__dataset__,
                                                  stateful_metrics=['d_loss', 'g_loss', 'adv_loss', 'cyc_loss',
-                                                                   'id_loss', 'ds_loss'],
+                                                                   'id_loss', 'seg_loss'],
                                                  verbose=1)
-                d_loss_total, g_loss_total, adv_loss_total, cyc_loss_total, id_loss_total, ds_loss_total = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                d_loss_total, g_loss_total, adv_loss_total, cyc_loss_total, id_loss_total, seg_loss_total = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+
 
                 if currentEpoch == NumEpochs // 2:
                     print('Reduced the influence of cycle-consistency to 5, identity to 2.5')
@@ -402,7 +333,7 @@ class Training:
 
                     self.model_weights.update({"lambda_cycle": self.model.lambda_cycle,
                                                "lambda_id": self.model.lambda_id,
-                                               "lambda_domain_shift": arguments.lambda_domain_shift})
+                                               "lambda_segmentation": arguments.lambda_segmentation})
 
                 for step, (image_A, image_B) in enumerate(self.dataset):
                     assert image_A.shape[0] == batch_size
@@ -415,7 +346,8 @@ class Training:
                     adv_loss_total += g_loss_per_batch["adv_loss"].numpy()
                     cyc_loss_total += g_loss_per_batch["cyc_loss"].numpy()
                     id_loss_total += g_loss_per_batch["id_loss"].numpy()
-                    ds_loss_total += g_loss_per_batch["ds_loss"].numpy()
+                    seg_loss_total += g_loss_per_batch["seg_loss"].numpy()
+
 
                     # Update Progbar
                     progbar.update(step + 1, values=[('d_loss', d_loss_total / (step + 1)),
@@ -423,7 +355,7 @@ class Training:
                                                      ('adv_loss', adv_loss_total / (step + 1)),
                                                      ('cyc_loss', cyc_loss_total / (step + 1)),
                                                      ('id_loss', id_loss_total / (step + 1)),
-                                                     ('ds_loss', ds_loss_total / (step + 1))])
+                                                     ('seg_loss', seg_loss_total / (step + 1))])
 
                     if step % sample_interval == 0:
                         self.sample_images(image_A, image_B, currentEpoch, step,
@@ -434,10 +366,10 @@ class Training:
                 adv_loss_avg = adv_loss_total / self.__len__dataset__
                 cyc_loss_avg = cyc_loss_total / self.__len__dataset__
                 id_loss_avg = id_loss_total / self.__len__dataset__
-                ds_loss_avg = ds_loss_total / self.__len__dataset__
+                seg_loss_avg = seg_loss_total / self.__len__dataset__
 
                 update_train_history(history, currentEpoch+1, d_loss_avg, g_loss_avg, adv_loss_avg,
-                                     cyc_loss_avg, id_loss_avg, ds_loss_avg)
+                                     cyc_loss_avg, id_loss_avg, seg_loss_avg)
 
                 print(f"saving latest checkpoint at {manager.save()}")
 
@@ -485,7 +417,7 @@ class Training:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Train DSA-GAN model")
+    parser = argparse.ArgumentParser(description="Train cycleGAN with self-supervision.")
 
     parser.add_argument("-sd", "--source_domain", type=str, default="02")
     parser.add_argument("-td", "--target_domain", type=str, default="03")
@@ -498,9 +430,7 @@ if __name__ == '__main__':
     parser.add_argument("-si", "--save_interval", type=int, default=1000)
     parser.add_argument("-pmp", "--pretrained_model_path", type=str)
     parser.add_argument("-pml", "--pretrained_model_label", type=str)
-    parser.add_argument("-l", "--lambda_domain_shift", type=float, default=1.0)
-    parser.add_argument("-ps", "--dsl_pool_size", type=int, default=50)
-    parser.add_argument("-cls", "--calculate_loss_strategy", type=str, default="proposed")
+    parser.add_argument("-l", "--lambda_segmentation", type=float, default=1.0)
 
     parser.add_argument("-dp", "--data_path", type=str, default=os.path.join(os.path.expanduser('~'), "data"))
     parser.add_argument("-op", "--output_path", type=str)
