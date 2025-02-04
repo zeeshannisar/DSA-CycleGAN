@@ -71,9 +71,6 @@ To train CycleGAN with Gaussian Noise, run:
 sh scripts/train_CycleGAN_with_Gaussian_Noise.sh
 ```
 
-## Evaluation
-*Note: This section is under development and will be updated soon.*
-
 ## Results
 *Note: This section is under development and will be updated soon.*
 
