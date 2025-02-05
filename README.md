@@ -3,17 +3,10 @@
 This repository contains the code for the paper "[DSA-CycleGAN: A Domain Shift Aware CycleGAN to enhance Stain Transfer in Digital Histopathology](https://openreview.net/pdf?id=zYBYJKHEhz)" submitted to [MIDL-2025](https://2025.midl.io/).
 
 ## Table of Contents
-- [Introduction](#introduction)
 - [Installation](#installation)
 - [Dataset](#dataset)
 - [Training](#training)
-- [Results](#results)
 - [Acknowledgements](#acknowledgements)
-
-## Introduction
-A key challenge in digital and computational histopathology is inter- and intra-stain variations, which can cause deep learning models to fail, particularly when trained on one stain (domain) and applied to others.
-
-*Note: This section is under development and will be updated soon.*
 
 ## Installation
 To install the required dependencies, run:
@@ -71,8 +64,21 @@ To train CycleGAN with Gaussian Noise, run:
 sh scripts/train_CycleGAN_with_Gaussian_Noise.sh
 ```
 
+<<<<<<< HEAD
 ## Results
 *Note: This section is under development and will be updated soon.*
 
 ## Acknowledgements
 *Note: This section is under development and will be updated soon.*
+=======
+## Acknowledgements
+This work is funded by Funded by ANR HistoGraph (ANR-23-CE45-0038) and the ArtIC project &ldquo;Artificial 
+Intelligence for Care&rdquo; (grant ANR-20-THIA-0006-01), co funded by *Région Grand Est*, Inria Nancy - 
+Grand Est, IHU Strasbourg, University of Strasbourg & University of Haute-Alsace. We acknowledge 
+the ERACoSysMed & e:Med initiatives by BMBF, SysMIFTA (managed by PTJ, FKZ 031L-0085A; ANR, grant 
+ANR-15-CMED-0004), Prof. Cédric Wemmert, and Prof. Friedrich Feuerhake and team at MHH for the 
+high-quality images & annotations: specifically N. Kroenke, for excellent technical assistance, 
+N. Schaadt, for image management and quality control, and V. Volk & J. Schmitz. for annotations 
+under the supervision of domain experts.
+
+>>>>>>> c4745e0 (update)
