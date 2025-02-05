@@ -64,13 +64,6 @@ To train CycleGAN with Gaussian Noise, run:
 sh scripts/train_CycleGAN_with_Gaussian_Noise.sh
 ```
 
-<<<<<<< HEAD
-## Results
-*Note: This section is under development and will be updated soon.*
-
-## Acknowledgements
-*Note: This section is under development and will be updated soon.*
-=======
 ## Acknowledgements
 This work is funded by Funded by ANR HistoGraph (ANR-23-CE45-0038) and the ArtIC project &ldquo;Artificial 
 Intelligence for Care&rdquo; (grant ANR-20-THIA-0006-01), co funded by *Région Grand Est*, Inria Nancy - 
@@ -80,5 +73,3 @@ ANR-15-CMED-0004), Prof. Cédric Wemmert, and Prof. Friedrich Feuerhake and team
 high-quality images & annotations: specifically N. Kroenke, for excellent technical assistance, 
 N. Schaadt, for image management and quality control, and V. Volk & J. Schmitz. for annotations 
 under the supervision of domain experts.
-
->>>>>>> c4745e0 (update)
