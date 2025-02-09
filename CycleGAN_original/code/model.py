@@ -22,8 +22,6 @@ class CycleGAN:
         self.img_rows = 508
         self.img_cols = 508
         self.channels = 3
-        self.extra_channel = extra_channel
-        self.extra_channel_mode = extra_channel_mode
 
         self.gf = 32
         self.df = 64
